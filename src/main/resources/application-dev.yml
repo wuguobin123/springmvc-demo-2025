@@ -1,0 +1,21 @@
+# 开发环境配置
+spring:
+  # 数据源配置 - 使用H2内存数据库进行演示
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+    
+  # 开发工具配置
+  devtools:
+    restart:
+      enabled: true
+    livereload:
+      enabled: true
+      
+# 开发环境日志级别
+logging:
+  level:
+    root: INFO
+    com.example.springmvc: DEBUG

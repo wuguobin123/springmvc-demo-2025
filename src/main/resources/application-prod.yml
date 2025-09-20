@@ -1,0 +1,36 @@
+# 生产环境配置
+spring:
+  # 数据源配置
+  datasource:
+    url: jdbc:mysql://prod-db-server:3306/springmvc_demo?useUnicode=true&characterEncoding=utf8&useSSL=true&serverTimezone=GMT%2B8
+    username: ${DB_USERNAME:prod_user}
+    password: ${DB_PASSWORD:prod_password}
+    
+  # Redis配置
+  redis:
+    host: ${REDIS_HOST:prod-redis-server}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:prod_redis_password}
+    database: 0
+    
+  # RabbitMQ配置
+  rabbitmq:
+    host: ${RABBITMQ_HOST:prod-rabbitmq-server}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:prod_user}
+    password: ${RABBITMQ_PASSWORD:prod_password}
+    virtual-host: ${RABBITMQ_VHOST:/prod}
+    
+  # JPA配置
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    
+# 生产环境日志级别
+logging:
+  level:
+    root: WARN
+    com.example.springmvc: INFO
+  file:
+    name: /var/log/springmvc-demo/application.log
