@@ -117,18 +117,98 @@ install_docker() {
 install_docker_compose() {
     log_info "安装Docker Compose..."
     
-    # 检查Docker Compose是否已安装
-    if command -v docker-compose &> /dev/null; then
-        log_warning "Docker Compose已安装，跳过安装步骤"
+    # 检查Docker Compose是否已安装并可用
+    if command -v docker-compose &> /dev/null && docker-compose --version &> /dev/null; then
+        local version=$(docker-compose --version | awk '{print $3}' | sed 's/,//')
+        log_warning "Docker Compose已安装 (版本: $version)，跳过安装步骤"
         return
     fi
     
-    # 下载Docker Compose
-    DOCKER_COMPOSE_VERSION="2.21.0"
-    curl -L "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    # 如果检测到旧版本或损坏的安装，先清理
+    if [ -f "/usr/local/bin/docker-compose" ]; then
+        log_info "检测到旧版本或损坏的Docker Compose，正在清理..."
+        rm -f /usr/local/bin/docker-compose
+    fi
     
-    # 添加执行权限
-    chmod +x /usr/local/bin/docker-compose
+    # 获取最新版本号
+    log_info "获取Docker Compose最新版本..."
+    DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+    
+    if [ -z "$DOCKER_COMPOSE_VERSION" ]; then
+        log_warning "无法获取最新版本，使用默认版本 2.21.0"
+        DOCKER_COMPOSE_VERSION="2.21.0"
+    else
+        log_info "将安装Docker Compose版本: $DOCKER_COMPOSE_VERSION"
+    fi
+    
+    # 多次尝试下载Docker Compose
+    local max_attempts=3
+    local attempt=1
+    local download_success=false
+    
+    while [ $attempt -le $max_attempts ] && [ "$download_success" = false ]; do
+        log_info "尝试下载Docker Compose (第 $attempt 次)..."
+        
+        if curl -L --connect-timeout 10 --max-time 300 --retry 3 --retry-delay 5 \
+            "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" \
+            -o /usr/local/bin/docker-compose; then
+            
+            # 检查下载的文件大小
+            if [ -s "/usr/local/bin/docker-compose" ]; then
+                download_success=true
+                log_success "Docker Compose下载成功"
+            else
+                log_error "下载的文件为空，删除并重试"
+                rm -f /usr/local/bin/docker-compose
+            fi
+        else
+            log_error "Docker Compose下载失败 (第 $attempt 次)"
+            rm -f /usr/local/bin/docker-compose
+        fi
+        
+        attempt=$((attempt + 1))
+        
+        if [ "$download_success" = false ] && [ $attempt -le $max_attempts ]; then
+            log_info "等待5秒后重试..."
+            sleep 5
+        fi
+    done
+    
+    if [ "$download_success" = false ]; then
+        log_error "Docker Compose下载失败，尝试使用备用方法..."
+        
+        # 尝试使用包管理器安装
+        if [ -f /etc/centos-release ] || [ -f /etc/alinux-release ]; then
+            log_info "尝试使用yum安装docker-compose..."
+            yum install -y python3-pip
+            pip3 install docker-compose
+        elif [ -f /etc/debian_version ]; then
+            log_info "尝试使用apt安装docker-compose..."
+            apt-get update
+            apt-get install -y docker-compose
+        else
+            log_error "所有安装方法都失败了"
+            return 1
+        fi
+    else
+        # 添加执行权限
+        chmod +x /usr/local/bin/docker-compose
+        
+        # 验证安装
+        if docker-compose --version &> /dev/null; then
+            local installed_version=$(docker-compose --version | awk '{print $3}' | sed 's/,//')
+            log_success "Docker Compose安装成功 (版本: $installed_version)"
+        else
+            log_error "Docker Compose安装验证失败"
+            return 1
+        fi
+    fi
+    
+    # 最终验证
+    if ! command -v docker-compose &> /dev/null; then
+        log_error "Docker Compose安装失败，命令不可用"
+        return 1
+    fi
     
     log_success "Docker Compose安装完成"
 }
@@ -241,14 +321,43 @@ main() {
     
     check_root
     update_system
-    install_docker
-    install_docker_compose
+    
+    # 安装Docker
+    if ! install_docker; then
+        log_error "Docker安装失败，退出脚本"
+        exit 1
+    fi
+    
+    # 安装Docker Compose
+    if ! install_docker_compose; then
+        log_error "Docker Compose安装失败，但继续其他步骤"
+        log_warning "您可能需要手动安装Docker Compose"
+    fi
+    
     configure_firewall
     create_app_directory
     configure_system_optimization
     install_monitoring
     
     log_success "服务器环境初始化完成！"
+    
+    # 最终检查
+    log_info "最终检查安装状态..."
+    if command -v docker &> /dev/null; then
+        log_success "✓ Docker: $(docker --version)"
+    else
+        log_error "✗ Docker: 未安装或不可用"
+    fi
+    
+    if command -v docker-compose &> /dev/null; then
+        log_success "✓ Docker Compose: $(docker-compose --version)"
+    else
+        log_warning "✗ Docker Compose: 未安装或不可用"
+        log_info "您可以手动运行以下命令安装:"
+        log_info "  curl -L \"https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m)\" -o /usr/local/bin/docker-compose"
+        log_info "  chmod +x /usr/local/bin/docker-compose"
+    fi
+    
     log_info "请重新登录以使用户组更改生效"
     log_info "然后您可以部署应用了"
 }
