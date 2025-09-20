@@ -130,83 +130,92 @@ install_docker_compose() {
         rm -f /usr/local/bin/docker-compose
     fi
     
-    # 获取最新版本号
-    log_info "获取Docker Compose最新版本..."
-    DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+    # 定义Docker Compose版本
+    DOCKER_COMPOSE_VERSION="2.21.0"
+    ARCH=$(uname -m)
+    OS=$(uname -s)
     
-    if [ -z "$DOCKER_COMPOSE_VERSION" ]; then
-        log_warning "无法获取最新版本，使用默认版本 2.21.0"
-        DOCKER_COMPOSE_VERSION="2.21.0"
-    else
-        log_info "将安装Docker Compose版本: $DOCKER_COMPOSE_VERSION"
-    fi
+    # 定义多个下载源（优先使用国内镜像）
+    declare -a DOWNLOAD_URLS=(
+        "https://get.daocloud.io/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
+        "https://ghproxy.com/https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
+        "https://mirror.ghproxy.com/https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
+        "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
+    )
     
-    # 多次尝试下载Docker Compose
-    local max_attempts=3
-    local attempt=1
-    local download_success=false
-    
-    while [ $attempt -le $max_attempts ] && [ "$download_success" = false ]; do
-        log_info "尝试下载Docker Compose (第 $attempt 次)..."
+    # 尝试从不同源下载Docker Compose
+    download_success=false
+    for url in "${DOWNLOAD_URLS[@]}"; do
+        log_info "尝试从 ${url##*/} 下载Docker Compose..."
         
-        if curl -L --connect-timeout 10 --max-time 300 --retry 3 --retry-delay 5 \
-            "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" \
-            -o /usr/local/bin/docker-compose; then
+        # 使用curl下载，设置超时和重试
+        if curl -L --connect-timeout 10 --max-time 600 --retry 5 --retry-delay 3 \
+            --retry-max-time 0 --progress-bar "$url" -o /tmp/docker-compose-download; then
             
-            # 检查下载的文件大小
-            if [ -s "/usr/local/bin/docker-compose" ]; then
-                download_success=true
-                log_success "Docker Compose下载成功"
+            # 验证下载的文件
+            if [ -s /tmp/docker-compose-download ]; then
+                # 检查文件类型
+                if file /tmp/docker-compose-download | grep -q "executable\|ELF"; then
+                    log_success "Docker Compose下载成功！"
+                    mv /tmp/docker-compose-download /usr/local/bin/docker-compose
+                    download_success=true
+                    break
+                else
+                    log_warning "下载的文件不是可执行文件，尝试下一个源..."
+                    rm -f /tmp/docker-compose-download
+                fi
             else
-                log_error "下载的文件为空，删除并重试"
-                rm -f /usr/local/bin/docker-compose
+                log_warning "下载的文件为空，尝试下一个源..."
+                rm -f /tmp/docker-compose-download
             fi
         else
-            log_error "Docker Compose下载失败 (第 $attempt 次)"
-            rm -f /usr/local/bin/docker-compose
+            log_warning "从该源下载失败，尝试下一个源..."
+            rm -f /tmp/docker-compose-download
         fi
         
-        attempt=$((attempt + 1))
-        
-        if [ "$download_success" = false ] && [ $attempt -le $max_attempts ]; then
-            log_info "等待5秒后重试..."
-            sleep 5
-        fi
+        # 在尝试下一个源之前稍作等待
+        sleep 2
     done
     
+    # 如果所有下载都失败，尝试使用包管理器安装
     if [ "$download_success" = false ]; then
-        log_error "Docker Compose下载失败，尝试使用备用方法..."
+        log_warning "所有下载源都失败，尝试使用包管理器安装..."
         
-        # 尝试使用包管理器安装
-        if [ -f /etc/centos-release ] || [ -f /etc/alinux-release ]; then
-            log_info "尝试使用yum安装docker-compose..."
+        if [ -f /etc/alinux-release ] || grep -q "Alibaba Cloud Linux" /etc/os-release 2>/dev/null || [ -f /etc/centos-release ]; then
+            # 阿里云Linux或CentOS系统，尝试使用pip安装
+            log_info "在CentOS/Alinux系统上使用pip安装docker-compose..."
             yum install -y python3-pip
-            pip3 install docker-compose
+            pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple docker-compose
+            download_success=true
         elif [ -f /etc/debian_version ]; then
-            log_info "尝试使用apt安装docker-compose..."
+            # Ubuntu/Debian系统，尝试使用apt安装
+            log_info "在Ubuntu/Debian系统上使用apt安装docker-compose..."
             apt-get update
             apt-get install -y docker-compose
-        else
-            log_error "所有安装方法都失败了"
-            return 1
+            download_success=true
         fi
-    else
+    fi
+    
+    # 如果成功下载了二进制文件，设置权限
+    if [ "$download_success" = true ] && [ -f "/usr/local/bin/docker-compose" ]; then
         # 添加执行权限
         chmod +x /usr/local/bin/docker-compose
         
-        # 验证安装
-        if docker-compose --version &> /dev/null; then
-            local installed_version=$(docker-compose --version | awk '{print $3}' | sed 's/,//')
-            log_success "Docker Compose安装成功 (版本: $installed_version)"
-        else
-            log_error "Docker Compose安装验证失败"
-            return 1
+        # 创建软链接到/usr/bin/
+        if [ ! -f /usr/bin/docker-compose ]; then
+            ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
         fi
     fi
     
-    # 最终验证
-    if ! command -v docker-compose &> /dev/null; then
-        log_error "Docker Compose安装失败，命令不可用"
+    # 最终验证安装
+    if command -v docker-compose &> /dev/null && docker-compose --version &> /dev/null; then
+        local installed_version=$(docker-compose --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+        log_success "Docker Compose安装成功 (版本: $installed_version)"
+    else
+        log_error "Docker Compose安装失败，请手动安装"
+        log_info "手动安装命令:"
+        log_info "sudo curl -L https://get.daocloud.io/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-\$(uname -s)-\$(uname -m) -o /usr/local/bin/docker-compose"
+        log_info "sudo chmod +x /usr/local/bin/docker-compose"
         return 1
     fi
     
