@@ -41,15 +41,22 @@ update_system() {
     log_info "更新系统软件包..."
     
     # 检测系统类型
-    if [ -f /etc/centos-release ]; then
-        # CentOS/RHEL
+    if [ -f /etc/alinux-release ] || grep -q "Alibaba Cloud Linux" /etc/os-release 2>/dev/null; then
+        # 阿里云Linux (Alinux)
+        log_info "检测到阿里云Linux系统..."
         yum update -y
-        yum install -y curl wget git vim
+        yum install -y curl wget git vim yum-utils
+    elif [ -f /etc/centos-release ]; then
+        # CentOS/RHEL
+        log_info "检测到CentOS/RHEL系统..."
+        yum update -y
+        yum install -y curl wget git vim yum-utils
     elif [ -f /etc/debian_version ]; then
         # Ubuntu/Debian
+        log_info "检测到Ubuntu/Debian系统..."
         apt-get update
         apt-get upgrade -y
-        apt-get install -y curl wget git vim
+        apt-get install -y curl wget git vim ca-certificates gnupg lsb-release
     else
         log_error "不支持的操作系统"
         exit 1
@@ -68,8 +75,33 @@ install_docker() {
         return
     fi
     
-    # 安装Docker
-    curl -fsSL https://get.docker.com | sh
+    # 检测系统类型并安装Docker
+    if [ -f /etc/alinux-release ] || grep -q "Alibaba Cloud Linux" /etc/os-release 2>/dev/null; then
+        # 阿里云Linux (Alinux)
+        log_info "检测到阿里云Linux系统，使用阿里云源安装Docker..."
+        yum install -y yum-utils
+        yum-config-manager --add-repo https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+        yum install -y docker-ce docker-ce-cli containerd.io
+    elif [ -f /etc/centos-release ]; then
+        # CentOS/RHEL
+        log_info "检测到CentOS/RHEL系统..."
+        yum install -y yum-utils
+        yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+        yum install -y docker-ce docker-ce-cli containerd.io
+    elif [ -f /etc/debian_version ]; then
+        # Ubuntu/Debian
+        log_info "检测到Ubuntu/Debian系统..."
+        apt-get update
+        apt-get install -y ca-certificates curl gnupg lsb-release
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+        apt-get update
+        apt-get install -y docker-ce docker-ce-cli containerd.io
+    else
+        # 其他系统，尝试使用官方脚本
+        log_info "使用Docker官方安装脚本..."
+        curl -fsSL https://get.docker.com | sh
+    fi
     
     # 启动Docker服务
     systemctl start docker
