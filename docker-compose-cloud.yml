@@ -1,0 +1,58 @@
+# 使用云服务的轻量化配置（推荐）
+version: '3.8'
+
+services:
+  # 仅部署Spring Boot应用
+  springmvc-app:
+    build: .
+    container_name: springmvc-demo-cloud
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      # 使用阿里云RDS MySQL
+      - DB_HOST=${ALIYUN_RDS_HOST}
+      - DB_PORT=${ALIYUN_RDS_PORT:3306}
+      - DB_NAME=${ALIYUN_RDS_DATABASE}
+      - DB_USERNAME=${ALIYUN_RDS_USERNAME}
+      - DB_PASSWORD=${ALIYUN_RDS_PASSWORD}
+      # 使用阿里云Redis
+      - REDIS_HOST=${ALIYUN_REDIS_HOST}
+      - REDIS_PORT=${ALIYUN_REDIS_PORT:6379}
+      - REDIS_PASSWORD=${ALIYUN_REDIS_PASSWORD}
+      # 使用阿里云MQ（可选，或移除RabbitMQ功能）
+      - RABBITMQ_HOST=${ALIYUN_MQ_HOST}
+      - RABBITMQ_PORT=${ALIYUN_MQ_PORT:5672}
+      - RABBITMQ_USERNAME=${ALIYUN_MQ_USERNAME}
+      - RABBITMQ_PASSWORD=${ALIYUN_MQ_PASSWORD}
+      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
+      # 优化JVM参数（更多内存给应用）
+      - JAVA_OPTS=-Xms256m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200
+    networks:
+      - app-network
+    volumes:
+      - ./logs:/var/log/springmvc-demo
+    restart: unless-stopped
+    # 内存限制（为应用分配更多内存）
+    mem_limit: 1200m
+    memswap_limit: 1200m
+
+  # 轻量化Nginx
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy-cloud
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - springmvc-app
+    networks:
+      - app-network
+    restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 64m
+
+networks:
+  app-network:
+    driver: bridge

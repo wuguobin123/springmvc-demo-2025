@@ -1,0 +1,36 @@
+# MySQL轻量化配置
+[mysqld]
+# 基础设置
+skip-host-cache
+skip-name-resolve
+
+# 内存优化设置
+innodb_buffer_pool_size = 128M
+innodb_log_buffer_size = 8M
+innodb_log_file_size = 32M
+key_buffer_size = 16M
+table_open_cache = 64
+sort_buffer_size = 512K
+net_buffer_length = 8K
+read_buffer_size = 256K
+read_rnd_buffer_size = 512K
+myisam_sort_buffer_size = 8M
+
+# 连接优化
+max_connections = 100
+thread_cache_size = 8
+query_cache_type = 1
+query_cache_size = 16M
+query_cache_limit = 1M
+
+# InnoDB优化
+innodb_flush_log_at_trx_commit = 2
+innodb_lock_wait_timeout = 50
+
+# 临时表优化
+tmp_table_size = 16M
+max_heap_table_size = 16M
+
+# 慢查询日志
+slow_query_log = 1
+long_query_time = 2
