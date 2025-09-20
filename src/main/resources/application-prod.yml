@@ -1,36 +1,103 @@
 # 生产环境配置
+server:
+  # 生产环境端口配置
+  port: ${SERVER_PORT:8080}
+  
 spring:
   # 数据源配置
   datasource:
-    url: jdbc:mysql://prod-db-server:3306/springmvc_demo?useUnicode=true&characterEncoding=utf8&useSSL=true&serverTimezone=GMT%2B8
-    username: ${DB_USERNAME:prod_user}
-    password: ${DB_PASSWORD:prod_password}
-    
-  # Redis配置
-  redis:
-    host: ${REDIS_HOST:prod-redis-server}
-    port: ${REDIS_PORT:6379}
-    password: ${REDIS_PASSWORD:prod_redis_password}
-    database: 0
-    
-  # RabbitMQ配置
-  rabbitmq:
-    host: ${RABBITMQ_HOST:prod-rabbitmq-server}
-    port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USERNAME:prod_user}
-    password: ${RABBITMQ_PASSWORD:prod_password}
-    virtual-host: ${RABBITMQ_VHOST:/prod}
+    url: jdbc:mysql://${DB_HOST:mysql}:${DB_PORT:3306}/${DB_NAME:springmvc_demo}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:springmvc_user}
+    password: ${DB_PASSWORD:springmvc_password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
     
   # JPA配置
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: ${DDL_AUTO:update}
     show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: false
+        
+  # Redis配置
+  redis:
+    host: ${REDIS_HOST:redis}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:redis_password}
+    database: ${REDIS_DATABASE:0}
+    timeout: 5000ms
+    lettuce:
+      pool:
+        max-active: 20
+        max-wait: -1ms
+        max-idle: 10
+        min-idle: 5
     
-# 生产环境日志级别
+  # RabbitMQ配置
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:admin}
+    password: ${RABBITMQ_PASSWORD:admin123}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        concurrency: 2
+        max-concurrency: 10
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 2000ms
+          
+  # Spring AI配置（生产环境）
+  ai:
+    openai:
+      api-key: ${SILICONFLOW_API_KEY:your-production-api-key}
+      base-url: ${AI_BASE_URL:https://api.siliconflow.cn/v1}
+      chat:
+        options:
+          model: ${AI_MODEL:Qwen/QwQ-32B}
+          temperature: ${AI_TEMPERATURE:0.7}
+          
+# 生产环境日志配置
 logging:
   level:
     root: WARN
     com.example.springmvc: INFO
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%logger{36}] - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%logger{36}] - %msg%n"
   file:
     name: /var/log/springmvc-demo/application.log
+    max-size: 200MB
+    max-history: 7
+    total-size-cap: 1GB
+    
+# 管理端点配置（生产环境安全配置）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      show-components: always
+    metrics:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+        
+# 安全配置
+security:
+  require-ssl: false
