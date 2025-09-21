@@ -44,11 +44,11 @@ fi
 
 # 检查并拉取Redis镜像
 echo "🔍 检查Redis镜像..."
-if ! docker image inspect him7zrbc.mirror.aliyuncs.com/library/redis:7-alpine > /dev/null 2>&1; then
+if ! docker image inspect him7zrbc.mirror.aliyuncs.com/library/redis:alpine > /dev/null 2>&1; then
     echo "📥 拉取Redis镜像..."
-    docker pull him7zrbc.mirror.aliyuncs.com/library/redis:7-alpine || {
+    docker pull him7zrbc.mirror.aliyuncs.com/library/redis:alpine || {
         echo "⚠️ Redis镜像拉取失败，尝试使用官方镜像..."
-        docker pull redis:7-alpine
+        docker pull redis:alpine
     }
 else
     echo "✅ Redis镜像已存在，跳过拉取"
@@ -56,11 +56,11 @@ fi
 
 # 检查并拉取RabbitMQ镜像
 echo "🔍 检查RabbitMQ镜像..."
-if ! docker image inspect him7zrbc.mirror.aliyuncs.com/library/rabbitmq:3-management > /dev/null 2>&1; then
+if ! docker image inspect him7zrbc.mirror.aliyuncs.com/library/rabbitmq:3.8-management > /dev/null 2>&1; then
     echo "📥 拉取RabbitMQ镜像..."
-    docker pull him7zrbc.mirror.aliyuncs.com/library/rabbitmq:3-management || {
+    docker pull him7zrbc.mirror.aliyuncs.com/library/rabbitmq:3.8-management || {
         echo "⚠️ RabbitMQ镜像拉取失败，尝试使用官方镜像..."
-        docker pull rabbitmq:3-management
+        docker pull rabbitmq:3.8-management
     }
 else
     echo "✅ RabbitMQ镜像已存在，跳过拉取"
@@ -68,11 +68,11 @@ fi
 
 # 检查并拉取Nginx镜像
 echo "🔍 检查Nginx镜像..."
-if ! docker image inspect him7zrbc.mirror.aliyuncs.com/library/nginx:alpine > /dev/null 2>&1; then
+if ! docker image inspect him7zrbc.mirror.aliyuncs.com/library/nginx:1.21-alpine > /dev/null 2>&1; then
     echo "📥 拉取Nginx镜像..."
-    docker pull him7zrbc.mirror.aliyuncs.com/library/nginx:alpine || {
+    docker pull him7zrbc.mirror.aliyuncs.com/library/nginx:1.21-alpine || {
         echo "⚠️ Nginx镜像拉取失败，尝试使用官方镜像..."
-        docker pull nginx:alpine
+        docker pull nginx:1.21-alpine
     }
 else
     echo "✅ Nginx镜像已存在，跳过拉取"
