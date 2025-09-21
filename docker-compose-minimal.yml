@@ -1,0 +1,48 @@
+# 最小化Docker Compose配置（仅AI服务调用）
+# 适用于只需要调用AI模型接口的场景
+
+services:
+  # Spring Boot应用
+  springmvc-app:
+    build: .
+    container_name: springmvc-demo-minimal
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev  # 使用dev环境，自动使用H2内存数据库
+      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
+      - AI_BASE_URL=https://api.siliconflow.cn/v1
+      - AI_MODEL=Qwen/QwQ-32B
+      - AI_TEMPERATURE=0.7
+      # JVM优化参数
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    # 内存限制
+    mem_limit: 600m
+    memswap_limit: 600m
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      timeout: 10s
+      interval: 30s
+      retries: 3
+      start_period: 60s
+
+  # 可选：Nginx代理（如果需要反向代理）
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy-minimal
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx-minimal.conf:/etc/nginx/nginx.conf
+    depends_on:
+      springmvc-app:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 64m
+    profiles:
+      - with-nginx  # 使用profile控制是否启用nginx

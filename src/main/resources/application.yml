@@ -26,8 +26,12 @@ spring:
           model: Qwen/QwQ-32B
           temperature: 0.7
     
-  # 数据源配置
+  # 数据源配置（开发环境将使用H2内存数据库）
   datasource:
+    # 生产环境数据库配置（待接入阿里云数据库时启用）
+    # url: ${DB_URL:jdbc:mysql://localhost:3306/springmvc_demo?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    # username: ${DB_USERNAME:root}
+    # password: ${DB_PASSWORD:password}
     type: com.alibaba.druid.pool.DruidDataSource
     driver-class-name: com.mysql.cj.jdbc.Driver
     druid:
@@ -61,29 +65,38 @@ spring:
         dialect: org.hibernate.dialect.H2Dialect
         format_sql: true
         
-  # Redis配置
-  redis:
-    timeout: 3000ms
-    lettuce:
-      pool:
-        max-active: 8
-        max-wait: -1ms
-        max-idle: 8
-        min-idle: 0
+  # Redis配置（暂时禁用，后续接入阿里云Redis时启用）
+  # redis:
+  #   host: ${REDIS_HOST:localhost}
+  #   port: ${REDIS_PORT:6379}
+  #   password: ${REDIS_PASSWORD:}
+  #   database: ${REDIS_DATABASE:0}
+  #   timeout: 3000ms
+  #   lettuce:
+  #     pool:
+  #       max-active: 8
+  #       max-wait: -1ms
+  #       max-idle: 8
+  #       min-idle: 0
         
-  # RabbitMQ配置
-  rabbitmq:
-    publisher-confirm-type: correlated
-    publisher-returns: true
-    listener:
-      simple:
-        acknowledge-mode: manual
-        concurrency: 1
-        max-concurrency: 10
-        retry:
-          enabled: true
-          max-attempts: 3
-          initial-interval: 1000ms
+  # RabbitMQ配置（暂时禁用，后续需要时启用）
+  # rabbitmq:
+  #   host: ${RABBITMQ_HOST:localhost}
+  #   port: ${RABBITMQ_PORT:5672}
+  #   username: ${RABBITMQ_USERNAME:guest}
+  #   password: ${RABBITMQ_PASSWORD:guest}
+  #   virtual-host: ${RABBITMQ_VHOST:/}
+  #   publisher-confirm-type: correlated
+  #   publisher-returns: true
+  #   listener:
+  #     simple:
+  #       acknowledge-mode: manual
+  #       concurrency: 1
+  #       max-concurrency: 10
+  #       retry:
+  #         enabled: true
+  #         max-attempts: 3
+  #         initial-interval: 1000ms
           
   # Jackson配置
   jackson:

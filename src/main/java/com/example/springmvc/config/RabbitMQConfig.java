@@ -24,7 +24,7 @@ import org.springframework.context.annotation.Configuration;
  * @version 1.0.0
  */
 @Configuration
-@ConditionalOnProperty(name = "spring.rabbitmq.host")
+@ConditionalOnProperty(name = "spring.rabbitmq.host", havingValue = "true", matchIfMissing = false)
 public class RabbitMQConfig {
 
     // 示例队列名称
