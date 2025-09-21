@@ -52,7 +52,7 @@ services:
 
   # MySQL数据库
   mysql:
-    image: registry.cn-hangzhou.aliyuncs.com/library/mysql:8.0
+    image: him7zrbc.mirror.aliyuncs.com/library/mysql:8.0
     container_name: mysql-db
     environment:
       - MYSQL_ROOT_PASSWORD=root_password
@@ -73,7 +73,7 @@ services:
 
   # Redis缓存
   redis:
-    image: registry.cn-hangzhou.aliyuncs.com/library/redis:alpine
+    image: him7zrbc.mirror.aliyuncs.com/library/redis:alpine
     container_name: redis-cache
     ports:
       - "6379:6379"
@@ -93,7 +93,7 @@ services:
 
   # RabbitMQ消息队列
   rabbitmq:
-    image: registry.cn-hangzhou.aliyuncs.com/library/rabbitmq:3.8-management
+    image: him7zrbc.mirror.aliyuncs.com/library/rabbitmq:3.8-management
     container_name: rabbitmq-mq
     environment:
       - RABBITMQ_DEFAULT_USER=admin
@@ -110,7 +110,7 @@ services:
 
   # Nginx反向代理
   nginx:
-    image: registry.cn-hangzhou.aliyuncs.com/library/nginx:1.21-alpine
+    image: him7zrbc.mirror.aliyuncs.com/library/nginx:1.21-alpine
     container_name: nginx-proxy
     ports:
       - "80:80"
