@@ -19,7 +19,7 @@ spring:
   # Spring AI配置
   ai:
     openai:
-      api-key: ${SILICONFLOW_API_KEY:your-api-key-here}
+      api-key: *************************
       base-url: https://api.siliconflow.cn/v1
       chat:
         options:

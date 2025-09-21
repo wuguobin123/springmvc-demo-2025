@@ -1,31 +1,57 @@
-# 使用官方OpenJDK 17镜像作为基础镜像
+# 阿里云ECS稳定版 Dockerfile
+# 使用系统Maven，避免Maven Wrapper网络问题
+
+# 使用官方OpenJDK镜像
 FROM openjdk:17-jdk-slim
 
 # 设置工作目录
 WORKDIR /app
 
 # 设置环境变量
-ENV JAVA_OPTS="-Xms512m -Xmx1024m -Djava.security.egd=file:/dev/./urandom"
-ENV PROFILE=prod
+ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+ENV PROFILE=dev
 
-# 安装必要的系统工具
+# 配置Debian源为阿里云镜像源，加速软件包下载
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list
+
+# 安装必要工具（包括Maven）
 RUN apt-get update && apt-get install -y \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    wget \
+    maven \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* /var/tmp/*
 
-# 复制Maven构建文件
+# 复制Maven配置文件
 COPY pom.xml .
-COPY .mvn .mvn
-COPY mvnw .
 
-# 下载依赖（利用Docker缓存）
-RUN ./mvnw dependency:go-offline -B
+# 配置Maven使用阿里云镜像源，大幅提升依赖下载速度
+RUN mkdir -p ~/.m2 && \
+    echo '<?xml version="1.0" encoding="UTF-8"?>' > ~/.m2/settings.xml && \
+    echo '<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"' >> ~/.m2/settings.xml && \
+    echo '    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' >> ~/.m2/settings.xml && \
+    echo '    xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0' >> ~/.m2/settings.xml && \
+    echo '                        http://maven.apache.org/xsd/settings-1.0.0.xsd">' >> ~/.m2/settings.xml && \
+    echo '  <mirrors>' >> ~/.m2/settings.xml && \
+    echo '    <mirror>' >> ~/.m2/settings.xml && \
+    echo '      <id>aliyunmaven</id>' >> ~/.m2/settings.xml && \
+    echo '      <mirrorOf>*</mirrorOf>' >> ~/.m2/settings.xml && \
+    echo '      <name>阿里云公共仓库</name>' >> ~/.m2/settings.xml && \
+    echo '      <url>https://maven.aliyun.com/repository/public</url>' >> ~/.m2/settings.xml && \
+    echo '    </mirror>' >> ~/.m2/settings.xml && \
+    echo '  </mirrors>' >> ~/.m2/settings.xml && \
+    echo '</settings>' >> ~/.m2/settings.xml
 
-# 复制源代码
+# 下载依赖（使用系统Maven，这一层会被缓存）
+RUN mvn dependency:go-offline -B
+
+# 复制源代码（源代码改变时只重新构建这一层及之后的层）
 COPY src src
 
-# 构建应用
-RUN ./mvnw clean package -DskipTests
+# 构建应用（添加-q参数减少输出，-Dmaven.compile.fork=true优化编译）
+RUN mvn clean package -DskipTests -q -Dmaven.compile.fork=true
 
 # 创建非root用户
 RUN groupadd -r appuser && useradd -r -g appuser appuser

@@ -29,6 +29,15 @@ public class AiConfig {
     @Value("${spring.ai.openai.base-url}")
     private String baseUrl;
 
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        System.out.println("🔍 AI配置初始化:");
+        System.out.println("🔑 API Key: " + (apiKey != null && !apiKey.isEmpty() ? "已设置 (长度: " + apiKey.length() + ")" : "未设置或为空"));
+        System.out.println("🌐 Base URL: " + baseUrl);
+        System.out.println("🔍 系统属性 SILICONFLOW_API_KEY: " + System.getProperty("SILICONFLOW_API_KEY"));
+        System.out.println("🔍 环境变量 SILICONFLOW_API_KEY: " + System.getenv("SILICONFLOW_API_KEY"));
+    }
+
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
