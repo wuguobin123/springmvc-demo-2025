@@ -47,14 +47,15 @@ check_docker_config() {
 
 # 配置Docker镜像源
 setup_docker_mirrors() {
-    log_info "配置Docker阿里云镜像源..."
+    log_info "配置Docker阿里云镜像源（参考官方文档）..."
     
     sudo mkdir -p /etc/docker
     
+    # 根据阿里云官方文档配置镜像源
     sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
 {
   "registry-mirrors": [
-    "https://registry.cn-hangzhou.aliyuncs.com",
+    "https://mirrors.aliyun.com",
     "https://dockerproxy.com",
     "https://mirror.baidubce.com",
     "https://docker.mirrors.ustc.edu.cn"
@@ -113,10 +114,10 @@ cleanup_docker() {
 
 # 预拉取基础镜像
 pull_base_images() {
-    log_info "预拉取基础镜像..."
+    log_info "预拉取基础镜像（使用配置的镜像源）..."
     
-    # 拉取阿里云的OpenJDK镜像
-    docker pull registry.cn-hangzhou.aliyuncs.com/library/openjdk:17-jdk-slim
+    # 使用官方镜像，通过Docker镜像源加速
+    docker pull openjdk:17-jdk-slim
     
     log_success "基础镜像拉取完成"
 }
@@ -126,8 +127,8 @@ build_and_deploy() {
     log_info "开始构建和部署..."
     
     # 检查必要文件
-    if [ ! -f "Dockerfile.aliyun" ]; then
-        log_error "Dockerfile.aliyun 不存在，请确保文件已上传"
+    if [ ! -f "Dockerfile.aliyun-fixed" ]; then
+        log_error "Dockerfile.aliyun-fixed 不存在，请确保文件已上传"
         exit 1
     fi
     
