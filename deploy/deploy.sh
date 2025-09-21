@@ -5,7 +5,15 @@
 
 set -e
 
+# 获取脚本所在目录的父目录（项目根目录）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# 切换到项目根目录
+cd "$PROJECT_DIR"
+
 echo "🚀 开始阿里云稳定版部署..."
+echo "📁 项目目录: $PROJECT_DIR"
 
 # 检查Docker是否运行
 if ! docker info > /dev/null 2>&1; then
@@ -24,6 +32,16 @@ export COMPOSE_PROJECT_NAME=springmvc-demo
 export DOCKER_BUILDKIT=1
 
 echo "📦 构建Docker镜像（使用稳定版Dockerfile）..."
+echo "🔍 检查Dockerfile是否存在..."
+if [ ! -f "Dockerfile.aliyun-stable" ]; then
+    echo "❌ Dockerfile.aliyun-stable 文件不存在！"
+    echo "📁 当前目录: $(pwd)"
+    echo "📋 目录内容:"
+    ls -la
+    exit 1
+fi
+
+echo "✅ Dockerfile.aliyun-stable 文件存在，开始构建..."
 docker build -f Dockerfile.aliyun-stable -t springmvc-demo:aliyun-stable .
 
 if [ $? -ne 0 ]; then
