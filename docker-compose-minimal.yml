@@ -4,7 +4,9 @@
 services:
   # Spring Boot应用
   springmvc-app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.aliyun
     container_name: springmvc-demo-minimal
     ports:
       - "8080:8080"

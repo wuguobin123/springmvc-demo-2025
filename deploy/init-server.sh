@@ -36,190 +36,316 @@ check_root() {
     fi
 }
 
-# 更新系统
-update_system() {
-    log_info "更新系统软件包..."
-    
-    # 检测系统类型
-    if [ -f /etc/alinux-release ] || grep -q "Alibaba Cloud Linux" /etc/os-release 2>/dev/null; then
-        # 阿里云Linux (Alinux)
-        log_info "检测到阿里云Linux系统..."
-        yum update -y
-        yum install -y curl wget git vim yum-utils
+# 检测系统类型
+detect_system() {
+    if [ -f /etc/alinux-release ]; then
+        # 阿里云Linux
+        ALINUX_VERSION=$(grep 'Alibaba Cloud Linux' /etc/alinux-release | grep -oE '[0-9]+' | head -n1)
+        if [ "$ALINUX_VERSION" = "3" ]; then
+            SYSTEM_TYPE="alinux3"
+            log_info "检测到Alibaba Cloud Linux 3系统"
+        else
+            SYSTEM_TYPE="alinux2"
+            log_info "检测到Alibaba Cloud Linux 2系统"
+        fi
+    elif grep -q "Alibaba Cloud Linux" /etc/os-release 2>/dev/null; then
+        if grep -q "Alibaba Cloud Linux 3" /etc/os-release; then
+            SYSTEM_TYPE="alinux3"
+            log_info "检测到Alibaba Cloud Linux 3系统"
+        else
+            SYSTEM_TYPE="alinux2"
+            log_info "检测到Alibaba Cloud Linux 2系统"
+        fi
+    elif [ -f /etc/anolis-release ]; then
+        SYSTEM_TYPE="anolis"
+        log_info "检测到Anolis OS系统"
+    elif [ -f /etc/redhat-release ] && grep -q "Red Hat" /etc/redhat-release; then
+        SYSTEM_TYPE="rhel"
+        log_info "检测到Red Hat Enterprise Linux系统"
+    elif [ -f /etc/fedora-release ]; then
+        SYSTEM_TYPE="fedora"
+        log_info "检测到Fedora系统"
     elif [ -f /etc/centos-release ]; then
-        # CentOS/RHEL
-        log_info "检测到CentOS/RHEL系统..."
-        yum update -y
-        yum install -y curl wget git vim yum-utils
+        SYSTEM_TYPE="centos"
+        log_info "检测到CentOS系统"
     elif [ -f /etc/debian_version ]; then
-        # Ubuntu/Debian
-        log_info "检测到Ubuntu/Debian系统..."
-        apt-get update
-        apt-get upgrade -y
-        apt-get install -y curl wget git vim ca-certificates gnupg lsb-release
+        if grep -q "Ubuntu" /etc/os-release; then
+            SYSTEM_TYPE="ubuntu"
+            log_info "检测到Ubuntu系统"
+        else
+            SYSTEM_TYPE="debian"
+            log_info "检测到Debian系统"
+        fi
     else
         log_error "不支持的操作系统"
         exit 1
     fi
+}
+
+# 更新系统
+update_system() {
+    log_info "更新系统软件包..."
+    
+    case $SYSTEM_TYPE in
+        alinux3)
+            dnf update -y
+            dnf install -y curl wget git vim dnf-utils ca-certificates
+            ;;
+        alinux2|centos|rhel|anolis)
+            yum update -y
+            yum install -y curl wget git vim yum-utils ca-certificates
+            ;;
+        fedora)
+            dnf update -y
+            dnf install -y curl wget git vim dnf-utils ca-certificates
+            ;;
+        ubuntu|debian)
+            apt-get update
+            apt-get upgrade -y
+            apt-get install -y curl wget git vim ca-certificates gnupg lsb-release apt-transport-https software-properties-common
+            ;;
+        *)
+            log_error "不支持的系统类型: $SYSTEM_TYPE"
+            exit 1
+            ;;
+    esac
     
     log_success "系统更新完成"
+}
+
+# 卸载旧版Docker
+uninstall_old_docker() {
+    log_info "卸载旧版本Docker..."
+    
+    case $SYSTEM_TYPE in
+        alinux3|fedora)
+            # 删除Docker相关源
+            rm -f /etc/yum.repos.d/docker*.repo
+            # 卸载Docker和相关的软件包
+            dnf -y remove docker-ce containerd.io docker-ce-rootless-extras \
+                docker-buildx-plugin docker-ce-cli docker-compose-plugin \
+                docker docker-client docker-client-latest docker-common \
+                docker-latest docker-latest-logrotate docker-logrotate docker-engine
+            ;;
+        alinux2|centos|rhel|anolis)
+            # 删除Docker相关源
+            rm -f /etc/yum.repos.d/docker*.repo
+            # 卸载Docker和相关的软件包
+            yum -y remove docker-ce containerd.io docker-ce-rootless-extras \
+                docker-buildx-plugin docker-ce-cli docker-compose-plugin \
+                docker docker-client docker-client-latest docker-common \
+                docker-latest docker-latest-logrotate docker-logrotate docker-engine
+            ;;
+        ubuntu|debian)
+            # 删除Docker相关源
+            rm -f /etc/apt/sources.list.d/*docker*.list
+            # 卸载Docker和相关的软件包
+            for pkg in docker.io docker-buildx-plugin docker-ce-cli docker-ce-rootless-extras \
+                      docker-compose-plugin docker-doc docker-compose podman-docker containerd runc \
+                      docker docker-engine docker.io containerd runc; do
+                apt-get remove -y $pkg 2>/dev/null || true
+            done
+            ;;
+    esac
+    
+    # 清理Docker数据目录（可选）
+    if [ -d "/var/lib/docker" ]; then
+        log_warning "发现Docker数据目录 /var/lib/docker，如需完全清理请手动删除"
+    fi
+    
+    log_success "旧版本Docker卸载完成"
 }
 
 # 安装Docker
 install_docker() {
     log_info "安装Docker..."
     
-    # 检查Docker是否已安装
-    if command -v docker &> /dev/null; then
-        log_warning "Docker已安装，跳过安装步骤"
+    # 检查Docker是否已安装且可用
+    if command -v docker &> /dev/null && docker --version &> /dev/null; then
+        local version=$(docker --version | awk '{print $3}' | sed 's/,//')
+        log_warning "Docker已安装 (版本: $version)，跳过安装步骤"
         return
     fi
     
-    # 检测系统类型并安装Docker
-    if [ -f /etc/alinux-release ] || grep -q "Alibaba Cloud Linux" /etc/os-release 2>/dev/null; then
-        # 阿里云Linux (Alinux)
-        log_info "检测到阿里云Linux系统，使用阿里云源安装Docker..."
-        yum install -y yum-utils
-        yum-config-manager --add-repo https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
-        yum install -y docker-ce docker-ce-cli containerd.io
-    elif [ -f /etc/centos-release ]; then
-        # CentOS/RHEL
-        log_info "检测到CentOS/RHEL系统..."
-        yum install -y yum-utils
-        yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-        yum install -y docker-ce docker-ce-cli containerd.io
-    elif [ -f /etc/debian_version ]; then
-        # Ubuntu/Debian
-        log_info "检测到Ubuntu/Debian系统..."
-        apt-get update
-        apt-get install -y ca-certificates curl gnupg lsb-release
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-        apt-get update
-        apt-get install -y docker-ce docker-ce-cli containerd.io
-    else
-        # 其他系统，尝试使用官方脚本
-        log_info "使用Docker官方安装脚本..."
-        curl -fsSL https://get.docker.com | sh
-    fi
+    # 先卸载旧版本
+    uninstall_old_docker
+    
+    # 根据系统类型安装Docker
+    case $SYSTEM_TYPE in
+        alinux3)
+            log_info "在Alibaba Cloud Linux 3上安装Docker..."
+            # 添加Docker软件包源
+            wget -O /etc/yum.repos.d/docker-ce.repo http://mirrors.cloud.aliyuncs.com/docker-ce/linux/centos/docker-ce.repo
+            sed -i 's|https://mirrors.aliyun.com|http://mirrors.cloud.aliyuncs.com|g' /etc/yum.repos.d/docker-ce.repo
+            # Alibaba Cloud Linux3专用的dnf源兼容插件
+            dnf -y install dnf-plugin-releasever-adapter --repo alinux3-plus
+            # 安装Docker社区版本，容器运行时containerd.io，以及Docker构建和Compose插件
+            dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            ;;
+        alinux2)
+            log_info "在Alibaba Cloud Linux 2上安装Docker..."
+            # 添加Docker软件包源
+            wget -O /etc/yum.repos.d/docker-ce.repo http://mirrors.cloud.aliyuncs.com/docker-ce/linux/centos/docker-ce.repo
+            sed -i 's|https://mirrors.aliyun.com|http://mirrors.cloud.aliyuncs.com|g' /etc/yum.repos.d/docker-ce.repo
+            # 安装Docker
+            yum -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            ;;
+        centos)
+            log_info "在CentOS上安装Docker..."
+            yum install -y yum-utils
+            yum-config-manager --add-repo http://mirrors.cloud.aliyuncs.com/docker-ce/linux/centos/docker-ce.repo
+            yum -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            ;;
+        rhel)
+            log_info "在Red Hat Enterprise Linux上安装Docker..."
+            # 添加Docker软件包源
+            wget -O /etc/yum.repos.d/docker-ce.repo http://mirrors.cloud.aliyuncs.com/docker-ce/linux/rhel/docker-ce.repo
+            sed -i 's|https://mirrors.aliyun.com|http://mirrors.cloud.aliyuncs.com|g' /etc/yum.repos.d/docker-ce.repo
+            yum -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            ;;
+        fedora)
+            log_info "在Fedora上安装Docker..."
+            # 添加Docker软件包源
+            wget -O /etc/yum.repos.d/docker-ce.repo http://mirrors.cloud.aliyuncs.com/docker-ce/linux/fedora/docker-ce.repo
+            sed -i 's|https://mirrors.aliyun.com|http://mirrors.cloud.aliyuncs.com|g' /etc/yum.repos.d/docker-ce.repo
+            dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            ;;
+        anolis)
+            log_info "在Anolis OS上安装Docker..."
+            # 添加Docker软件包源
+            wget -O /etc/yum.repos.d/docker-ce.repo http://mirrors.cloud.aliyuncs.com/docker-ce/linux/centos/docker-ce.repo
+            sed -i 's|https://mirrors.aliyun.com|http://mirrors.cloud.aliyuncs.com|g' /etc/yum.repos.d/docker-ce.repo
+            yum -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            ;;
+        ubuntu)
+            log_info "在Ubuntu上安装Docker..."
+            # 更新包管理工具
+            apt-get update
+            # 添加Docker软件包源
+            curl -fsSL http://mirrors.cloud.aliyuncs.com/docker-ce/linux/ubuntu/gpg | apt-key add -
+            add-apt-repository -y "deb [arch=$(dpkg --print-architecture)] http://mirrors.cloud.aliyuncs.com/docker-ce/linux/ubuntu $(lsb_release -cs) stable"
+            # 安装Docker
+            apt-get update
+            apt-get -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            ;;
+        debian)
+            log_info "在Debian上安装Docker..."
+            # 更新包管理工具
+            apt-get update
+            # 添加Docker软件包源
+            curl -fsSL http://mirrors.cloud.aliyuncs.com/docker-ce/linux/debian/gpg | apt-key add -
+            add-apt-repository -y "deb [arch=$(dpkg --print-architecture)] http://mirrors.cloud.aliyuncs.com/docker-ce/linux/debian $(lsb_release -cs) stable"
+            # 安装Docker
+            apt-get update
+            apt-get -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            ;;
+        *)
+            log_error "不支持的系统类型: $SYSTEM_TYPE"
+            return 1
+            ;;
+    esac
     
     # 启动Docker服务
     systemctl start docker
     systemctl enable docker
     
     # 添加当前用户到docker组
-    usermod -aG docker $USER
+    if [ -n "$SUDO_USER" ]; then
+        usermod -aG docker $SUDO_USER
+        log_info "已将用户 $SUDO_USER 添加到docker组"
+    else
+        usermod -aG docker $USER
+        log_info "已将当前用户添加到docker组"
+    fi
     
     log_success "Docker安装完成"
 }
 
-# 安装Docker Compose
-install_docker_compose() {
-    log_info "安装Docker Compose..."
+# 验证Docker Compose插件
+verify_docker_compose() {
+    log_info "验证Docker Compose插件..."
     
-    # 检查Docker Compose是否已安装并可用
-    if command -v docker-compose &> /dev/null && docker-compose --version &> /dev/null; then
-        local version=$(docker-compose --version | awk '{print $3}' | sed 's/,//')
-        log_warning "Docker Compose已安装 (版本: $version)，跳过安装步骤"
-        return
+    # 检查Docker Compose插件是否可用
+    if docker compose version &> /dev/null; then
+        local version=$(docker compose version --short 2>/dev/null || docker compose version | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 | sed 's/v//')
+        log_success "Docker Compose插件已安装 (版本: $version)"
+        return 0
     fi
     
-    # 如果检测到旧版本或损坏的安装，先清理
-    if [ -f "/usr/local/bin/docker-compose" ]; then
-        log_info "检测到旧版本或损坏的Docker Compose，正在清理..."
-        rm -f /usr/local/bin/docker-compose
+    # 如果插件不可用，尝试手动安装
+    log_warning "Docker Compose插件不可用，尝试手动安装..."
+    
+    # 检查插件目录是否存在
+    if [ ! -d "/usr/local/lib/docker/cli-plugins" ]; then
+        mkdir -p /usr/local/lib/docker/cli-plugins
     fi
     
     # 定义Docker Compose版本
-    DOCKER_COMPOSE_VERSION="2.21.0"
+    DOCKER_COMPOSE_VERSION="v2.21.0"
     ARCH=$(uname -m)
-    OS=$(uname -s)
+    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
     
     # 定义多个下载源（优先使用国内镜像）
     declare -a DOWNLOAD_URLS=(
-        "https://get.daocloud.io/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
-        "https://ghproxy.com/https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
-        "https://mirror.ghproxy.com/https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
-        "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
+        "https://ghproxy.com/https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
+        "https://mirror.ghproxy.com/https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
+        "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
     )
     
-    # 尝试从不同源下载Docker Compose
+    # 尝试下载Docker Compose插件
     download_success=false
     for url in "${DOWNLOAD_URLS[@]}"; do
-        log_info "尝试从 ${url##*/} 下载Docker Compose..."
+        log_info "尝试从 GitHub 下载Docker Compose插件..."
         
-        # 使用curl下载，设置超时和重试
-        if curl -L --connect-timeout 10 --max-time 600 --retry 5 --retry-delay 3 \
-            --retry-max-time 0 --progress-bar "$url" -o /tmp/docker-compose-download; then
+        if curl -L --connect-timeout 10 --max-time 300 --retry 3 --retry-delay 3 \
+            "$url" -o /usr/local/lib/docker/cli-plugins/docker-compose; then
             
             # 验证下载的文件
-            if [ -s /tmp/docker-compose-download ]; then
-                # 检查文件类型
-                if file /tmp/docker-compose-download | grep -q "executable\|ELF"; then
-                    log_success "Docker Compose下载成功！"
-                    mv /tmp/docker-compose-download /usr/local/bin/docker-compose
+            if [ -s /usr/local/lib/docker/cli-plugins/docker-compose ]; then
+                # 设置权限
+                chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+                
+                # 测试插件是否工作
+                if docker compose version &> /dev/null; then
+                    local version=$(docker compose version --short 2>/dev/null || echo "unknown")
+                    log_success "Docker Compose插件安装成功 (版本: $version)"
                     download_success=true
                     break
                 else
-                    log_warning "下载的文件不是可执行文件，尝试下一个源..."
-                    rm -f /tmp/docker-compose-download
+                    log_warning "插件下载完成但无法正常工作，尝试下一个源..."
+                    rm -f /usr/local/lib/docker/cli-plugins/docker-compose
                 fi
             else
                 log_warning "下载的文件为空，尝试下一个源..."
-                rm -f /tmp/docker-compose-download
+                rm -f /usr/local/lib/docker/cli-plugins/docker-compose
             fi
         else
             log_warning "从该源下载失败，尝试下一个源..."
-            rm -f /tmp/docker-compose-download
         fi
         
-        # 在尝试下一个源之前稍作等待
         sleep 2
     done
     
-    # 如果所有下载都失败，尝试使用包管理器安装
+    # 如果插件安装失败，检查是否有独立的docker-compose
     if [ "$download_success" = false ]; then
-        log_warning "所有下载源都失败，尝试使用包管理器安装..."
+        log_warning "Docker Compose插件安装失败，检查独立版本..."
         
-        if [ -f /etc/alinux-release ] || grep -q "Alibaba Cloud Linux" /etc/os-release 2>/dev/null || [ -f /etc/centos-release ]; then
-            # 阿里云Linux或CentOS系统，尝试使用pip安装
-            log_info "在CentOS/Alinux系统上使用pip安装docker-compose..."
-            yum install -y python3-pip
-            pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple docker-compose
-            download_success=true
-        elif [ -f /etc/debian_version ]; then
-            # Ubuntu/Debian系统，尝试使用apt安装
-            log_info "在Ubuntu/Debian系统上使用apt安装docker-compose..."
-            apt-get update
-            apt-get install -y docker-compose
-            download_success=true
+        if command -v docker-compose &> /dev/null; then
+            local version=$(docker-compose --version | awk '{print $3}' | sed 's/,//' | head -n1)
+            log_warning "发现独立版本的Docker Compose (版本: $version)"
+            log_info "建议使用 'docker compose' 命令替代 'docker-compose'"
+            return 0
+        else
+            log_error "Docker Compose未安装且插件安装失败"
+            log_info "您可以手动安装Docker Compose插件:"
+            log_info "  mkdir -p /usr/local/lib/docker/cli-plugins"
+            log_info "  curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m) -o /usr/local/lib/docker/cli-plugins/docker-compose"
+            log_info "  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose"
+            return 1
         fi
     fi
     
-    # 如果成功下载了二进制文件，设置权限
-    if [ "$download_success" = true ] && [ -f "/usr/local/bin/docker-compose" ]; then
-        # 添加执行权限
-        chmod +x /usr/local/bin/docker-compose
-        
-        # 创建软链接到/usr/bin/
-        if [ ! -f /usr/bin/docker-compose ]; then
-            ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
-        fi
-    fi
-    
-    # 最终验证安装
-    if command -v docker-compose &> /dev/null && docker-compose --version &> /dev/null; then
-        local installed_version=$(docker-compose --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
-        log_success "Docker Compose安装成功 (版本: $installed_version)"
-    else
-        log_error "Docker Compose安装失败，请手动安装"
-        log_info "手动安装命令:"
-        log_info "sudo curl -L https://get.daocloud.io/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-\$(uname -s)-\$(uname -m) -o /usr/local/bin/docker-compose"
-        log_info "sudo chmod +x /usr/local/bin/docker-compose"
-        return 1
-    fi
-    
-    log_success "Docker Compose安装完成"
+    return 0
 }
 
 # 配置防火墙
@@ -278,6 +404,57 @@ create_app_directory() {
     log_success "应用目录创建完成"
 }
 
+# 配置Docker
+configure_docker() {
+    log_info "配置Docker..."
+    
+    # 创建Docker配置目录
+    mkdir -p /etc/docker
+    
+    # 配置Docker daemon.json（针对中国用户优化）
+    cat > /etc/docker/daemon.json << 'EOF'
+{
+  "registry-mirrors": [
+    "http://mirrors.cloud.aliyuncs.com",
+    "https://dockerproxy.com",
+    "https://mirror.baidubce.com",
+    "https://docker.mirrors.ustc.edu.cn"
+  ],
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m",
+    "max-file": "3"
+  },
+  "storage-driver": "overlay2",
+  "storage-opts": [
+    "overlay2.override_kernel_check=true"
+  ],
+  "live-restore": true,
+  "userland-proxy": false,
+  "experimental": false,
+  "metrics-addr": "0.0.0.0:9323",
+  "default-address-pools": [
+    {
+      "base": "172.30.0.0/16",
+      "size": 24
+    }
+  ]
+}
+EOF
+    
+    # 重新加载Docker配置
+    systemctl daemon-reload
+    systemctl restart docker
+    
+    # 验证Docker配置
+    if docker info >/dev/null 2>&1; then
+        log_success "Docker配置完成并验证成功"
+    else
+        log_warning "Docker配置完成但验证失败，请检查配置"
+    fi
+}
+
 # 配置系统优化
 configure_system_optimization() {
     log_info "配置系统优化..."
@@ -297,11 +474,20 @@ net.core.somaxconn = 32768
 net.core.netdev_max_backlog = 32768
 net.ipv4.tcp_max_syn_backlog = 32768
 net.ipv4.tcp_fin_timeout = 10
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_keepalive_time = 1200
+net.ipv4.ip_local_port_range = 10000 65000
 
 # 内存优化
 vm.swappiness = 10
 vm.dirty_ratio = 15
 vm.dirty_background_ratio = 5
+vm.overcommit_memory = 1
+vm.panic_on_oom = 0
+
+# 文件系统优化
+fs.file-max = 2097152
+fs.nr_open = 2097152
 EOF
     
     # 应用内核参数
@@ -327,8 +513,15 @@ install_monitoring() {
 # 主函数
 main() {
     log_info "开始初始化阿里云ECS服务器环境..."
+    log_info "脚本基于阿里云官方文档优化: https://help.aliyun.com/zh/ecs/use-cases/install-and-use-docker"
     
+    # 检查root权限
     check_root
+    
+    # 检测系统类型
+    detect_system
+    
+    # 更新系统
     update_system
     
     # 安装Docker
@@ -337,38 +530,94 @@ main() {
         exit 1
     fi
     
-    # 安装Docker Compose
-    if ! install_docker_compose; then
-        log_error "Docker Compose安装失败，但继续其他步骤"
-        log_warning "您可能需要手动安装Docker Compose"
+    # 配置Docker
+    configure_docker
+    
+    # 验证Docker Compose插件
+    if ! verify_docker_compose; then
+        log_warning "Docker Compose插件验证失败，但继续其他步骤"
     fi
     
+    # 配置防火墙
     configure_firewall
+    
+    # 创建应用目录
     create_app_directory
+    
+    # 配置系统优化
     configure_system_optimization
+    
+    # 安装监控工具
     install_monitoring
     
     log_success "服务器环境初始化完成！"
     
     # 最终检查
-    log_info "最终检查安装状态..."
-    if command -v docker &> /dev/null; then
-        log_success "✓ Docker: $(docker --version)"
+    log_info "\n最终检查安装状态..."
+    echo "========================================"
+    
+    # 检查Docker
+    if command -v docker &> /dev/null && docker --version &> /dev/null; then
+        local docker_version=$(docker --version | awk '{print $3}' | sed 's/,//')
+        log_success "✓ Docker: $docker_version"
+        
+        # 检查Docker服务状态
+        if systemctl is-active --quiet docker; then
+            log_success "✓ Docker服务: 运行中"
+        else
+            log_error "✗ Docker服务: 未运行"
+        fi
     else
         log_error "✗ Docker: 未安装或不可用"
     fi
     
-    if command -v docker-compose &> /dev/null; then
-        log_success "✓ Docker Compose: $(docker-compose --version)"
+    # 检查Docker Compose
+    if docker compose version &> /dev/null 2>&1; then
+        local compose_version=$(docker compose version --short 2>/dev/null || echo "unknown")
+        log_success "✓ Docker Compose (插件): $compose_version"
+    elif command -v docker-compose &> /dev/null; then
+        local compose_version=$(docker-compose --version | awk '{print $3}' | sed 's/,//' | head -n1)
+        log_warning "✓ Docker Compose (独立版本): $compose_version"
+        log_info "  建议使用 'docker compose' 命令替代 'docker-compose'"
     else
-        log_warning "✗ Docker Compose: 未安装或不可用"
-        log_info "您可以手动运行以下命令安装:"
-        log_info "  curl -L \"https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m)\" -o /usr/local/bin/docker-compose"
-        log_info "  chmod +x /usr/local/bin/docker-compose"
+        log_error "✗ Docker Compose: 未安装或不可用"
+        log_info "  您可以手动安装Docker Compose插件:"
+        log_info "    mkdir -p /usr/local/lib/docker/cli-plugins"
+        log_info "    curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m) -o /usr/local/lib/docker/cli-plugins/docker-compose"
+        log_info "    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose"
     fi
     
-    log_info "请重新登录以使用户组更改生效"
-    log_info "然后您可以部署应用了"
+    # 检查防火墙
+    if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
+        log_success "✓ 防火墙: firewalld 运行中"
+    elif command -v ufw &> /dev/null && ufw status | grep -q "Status: active"; then
+        log_success "✓ 防火墙: ufw 已启用"
+    else
+        log_warning "! 防火墙: 状态未知或未配置"
+    fi
+    
+    # 检查应用目录
+    if [ -d "/opt/springmvc-demo" ]; then
+        log_success "✓ 应用目录: /opt/springmvc-demo"
+    else
+        log_error "✗ 应用目录: 创建失败"
+    fi
+    
+    echo "========================================"
+    
+    log_info "\n重要提示:"
+    log_warning "1. 请重新登录SSH以使用户组更改生效（docker组）"
+    log_info "2. 现在您可以部署Spring MVC应用了"
+    log_info "3. 使用 'docker compose' 命令管理容器（推荐）"
+    log_info "4. 应用部署目录: /opt/springmvc-demo"
+    
+    if [ -n "$SUDO_USER" ]; then
+        log_info "5. 已将用户 $SUDO_USER 添加到docker组"
+    fi
+    
+    log_info "\n快速测试Docker安装:"
+    log_info "  docker run --rm hello-world"
+    log_info "  docker compose version"
 }
 
 # 执行主函数
