@@ -1,5 +1,4 @@
 # 轻量化Docker Compose配置（适合2核2GB服务器）
-version: '3.8'
 
 services:
   # Spring Boot应用
@@ -26,9 +25,12 @@ services:
       # 优化JVM参数
       - JAVA_OPTS=-Xms128m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200
     depends_on:
-      - mysql
-      - redis
-      - rabbitmq
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - app-network
     volumes:
@@ -37,10 +39,18 @@ services:
     # 内存限制
     mem_limit: 600m
     memswap_limit: 600m
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      timeout: 10s
+      interval: 30s
+      retries: 3
+      start_period: 120s
 
   # 轻量化MySQL配置
   mysql:
     image: mysql:8.0
+    pull_policy: if_not_present
     container_name: mysql-db-light
     environment:
       - MYSQL_ROOT_PASSWORD=root_password
@@ -59,11 +69,19 @@ services:
     # 内存限制
     mem_limit: 300m
     memswap_limit: 300m
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      interval: 30s
+      retries: 3
+      start_period: 60s
     command: --default-authentication-plugin=mysql_native_password --innodb-buffer-pool-size=128M
 
   # 轻量化Redis配置
   redis:
     image: redis:7-alpine
+    pull_policy: if_not_present
     container_name: redis-cache-light
     ports:
       - "6379:6379"
@@ -76,10 +94,18 @@ services:
     # 内存限制
     mem_limit: 128m
     memswap_limit: 128m
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      timeout: 3s
+      interval: 30s
+      retries: 3
+      start_period: 30s
 
   # 轻量化RabbitMQ配置
   rabbitmq:
     image: rabbitmq:3-alpine
+    pull_policy: if_not_present
     container_name: rabbitmq-mq-light
     environment:
       - RABBITMQ_DEFAULT_USER=admin
@@ -95,23 +121,39 @@ services:
     # 内存限制
     mem_limit: 200m
     memswap_limit: 200m
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      timeout: 30s
+      interval: 60s
+      retries: 3
+      start_period: 60s
 
   # 轻量化Nginx配置
   nginx:
     image: nginx:alpine
+    pull_policy: if_not_present
     container_name: nginx-proxy-light
     ports:
       - "80:80"
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
     depends_on:
-      - springmvc-app
+      springmvc-app:
+        condition: service_healthy
     networks:
       - app-network
     restart: unless-stopped
     # 内存限制
     mem_limit: 64m
     memswap_limit: 64m
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      timeout: 3s
+      interval: 30s
+      retries: 3
+      start_period: 10s
 
 volumes:
   mysql_data:
@@ -121,3 +163,10 @@ volumes:
 networks:
   app-network:
     driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1450
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
