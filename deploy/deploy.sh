@@ -27,6 +27,59 @@ if ! docker compose version > /dev/null 2>&1; then
     exit 1
 fi
 
+# 预拉取必要的镜像（避免网络超时问题）
+echo "📥 检查并预拉取必要的Docker镜像..."
+
+# 检查并拉取MySQL镜像
+echo "🔍 检查MySQL镜像..."
+if ! docker image inspect registry.cn-hangzhou.aliyuncs.com/library/mysql:8.0 > /dev/null 2>&1; then
+    echo "📥 拉取MySQL镜像..."
+    docker pull registry.cn-hangzhou.aliyuncs.com/library/mysql:8.0 || {
+        echo "⚠️ MySQL镜像拉取失败，尝试使用官方镜像..."
+        docker pull mysql:8.0
+    }
+else
+    echo "✅ MySQL镜像已存在，跳过拉取"
+fi
+
+# 检查并拉取Redis镜像
+echo "🔍 检查Redis镜像..."
+if ! docker image inspect registry.cn-hangzhou.aliyuncs.com/library/redis:7-alpine > /dev/null 2>&1; then
+    echo "📥 拉取Redis镜像..."
+    docker pull registry.cn-hangzhou.aliyuncs.com/library/redis:7-alpine || {
+        echo "⚠️ Redis镜像拉取失败，尝试使用官方镜像..."
+        docker pull redis:7-alpine
+    }
+else
+    echo "✅ Redis镜像已存在，跳过拉取"
+fi
+
+# 检查并拉取RabbitMQ镜像
+echo "🔍 检查RabbitMQ镜像..."
+if ! docker image inspect registry.cn-hangzhou.aliyuncs.com/library/rabbitmq:3-management > /dev/null 2>&1; then
+    echo "📥 拉取RabbitMQ镜像..."
+    docker pull registry.cn-hangzhou.aliyuncs.com/library/rabbitmq:3-management || {
+        echo "⚠️ RabbitMQ镜像拉取失败，尝试使用官方镜像..."
+        docker pull rabbitmq:3-management
+    }
+else
+    echo "✅ RabbitMQ镜像已存在，跳过拉取"
+fi
+
+# 检查并拉取Nginx镜像
+echo "🔍 检查Nginx镜像..."
+if ! docker image inspect registry.cn-hangzhou.aliyuncs.com/library/nginx:alpine > /dev/null 2>&1; then
+    echo "📥 拉取Nginx镜像..."
+    docker pull registry.cn-hangzhou.aliyuncs.com/library/nginx:alpine || {
+        echo "⚠️ Nginx镜像拉取失败，尝试使用官方镜像..."
+        docker pull nginx:alpine
+    }
+else
+    echo "✅ Nginx镜像已存在，跳过拉取"
+fi
+
+echo "✅ 镜像检查完成"
+
 # 设置环境变量
 export COMPOSE_PROJECT_NAME=springmvc-demo
 export DOCKER_BUILDKIT=1

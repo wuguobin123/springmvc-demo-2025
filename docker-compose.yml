@@ -1,5 +1,12 @@
 # Docker Compose配置文件
-version: '3.8'
+# version字段已过时，移除以使用最新版本
+
+# 设置默认网络配置
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   # Spring Boot应用
@@ -41,10 +48,11 @@ services:
       retries: 3
       start_period: 60s
     restart: unless-stopped
+    logging: *default-logging
 
   # MySQL数据库
   mysql:
-    image: mysql:8.0
+    image: registry.cn-hangzhou.aliyuncs.com/library/mysql:8.0
     container_name: mysql-db
     environment:
       - MYSQL_ROOT_PASSWORD=root_password
@@ -60,11 +68,12 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    logging: *default-logging
     command: --default-authentication-plugin=mysql_native_password
 
   # Redis缓存
   redis:
-    image: redis:7-alpine
+    image: registry.cn-hangzhou.aliyuncs.com/library/redis:7-alpine
     container_name: redis-cache
     ports:
       - "6379:6379"
@@ -74,10 +83,17 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
 
   # RabbitMQ消息队列
   rabbitmq:
-    image: rabbitmq:3-management
+    image: registry.cn-hangzhou.aliyuncs.com/library/rabbitmq:3-management
     container_name: rabbitmq-mq
     environment:
       - RABBITMQ_DEFAULT_USER=admin
@@ -90,10 +106,11 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    logging: *default-logging
 
   # Nginx反向代理
   nginx:
-    image: nginx:alpine
+    image: registry.cn-hangzhou.aliyuncs.com/library/nginx:alpine
     container_name: nginx-proxy
     ports:
       - "80:80"
@@ -104,6 +121,7 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    logging: *default-logging
 
 volumes:
   mysql_data:

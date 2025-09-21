@@ -1,0 +1,20 @@
+{
+  "registry-mirrors": [
+    "https://him7zrbc.mirror.aliyuncs.com",
+    "https://registry.cn-hangzhou.aliyuncs.com",
+    "https://docker.mirrors.ustc.edu.cn"
+  ],
+  "insecure-registries": [],
+  "debug": false,
+  "experimental": false,
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "storage-driver": "overlay2",
+  "live-restore": true,
+  "userland-proxy": false,
+  "ip-forward": true,
+  "ip-masq": true
+}
