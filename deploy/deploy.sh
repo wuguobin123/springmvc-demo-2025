@@ -13,9 +13,9 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
-# 检查docker-compose是否可用
-if ! command -v docker-compose > /dev/null 2>&1; then
-    echo "❌ docker-compose未安装，请先安装docker-compose"
+# 检查docker compose是否可用
+if ! docker compose version > /dev/null 2>&1; then
+    echo "❌ docker compose未安装，请先安装docker compose插件"
     exit 1
 fi
 
@@ -35,11 +35,11 @@ echo "✅ Docker镜像构建成功"
 
 # 停止现有容器
 echo "🛑 停止现有容器..."
-docker-compose -f docker-compose.yml down 2>/dev/null || true
+docker compose -f docker-compose.yml down 2>/dev/null || true
 
 # 启动服务
 echo "🚀 启动服务..."
-docker-compose -f docker-compose.yml up -d
+docker compose -f docker-compose.yml up -d
 
 # 等待服务启动
 echo "⏳ 等待服务启动..."
@@ -47,7 +47,7 @@ sleep 10
 
 # 检查服务状态
 echo "🔍 检查服务状态..."
-docker-compose -f docker-compose.yml ps
+docker compose -f docker-compose.yml ps
 
 # 检查应用健康状态
 echo "🏥 检查应用健康状态..."
@@ -65,6 +65,6 @@ done
 
 # 显示日志
 echo "📋 显示应用日志..."
-docker-compose -f docker-compose.yml logs --tail=20
+docker compose -f docker-compose.yml logs --tail=20
 
 echo "🎉 部署完成！"

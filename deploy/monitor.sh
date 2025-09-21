@@ -25,10 +25,14 @@ check_health() {
 restart_app() {
     log "应用健康检查失败，开始重启..."
     
-    cd /opt/springmvc-demo
+    # 获取当前脚本所在目录的父目录作为项目根目录
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+    
+    cd "$PROJECT_DIR"
     
     # 重启容器
-    docker-compose restart springmvc-app
+    docker compose restart springmvc-app
     
     # 等待启动
     sleep 30
