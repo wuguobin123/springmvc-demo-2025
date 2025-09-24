@@ -10,6 +10,20 @@ else
     echo "⚠️ .env文件不存在"
 fi
 
-# 启动应用
-echo "🚀 启动Spring Boot应用..."
-java -jar target/springmvc-demo-1.0.0.jar
+# 构建并启动应用
+JAR=$(ls -1 target/*.jar 2>/dev/null | grep -v 'original' | head -n 1)
+
+if [ ! -f "$JAR" ]; then
+    echo "🔨 未找到可执行jar，开始构建..."
+    ./mvnw -q -DskipTests package || { echo "❌ 构建失败"; exit 1; }
+    JAR=$(ls -1 target/*.jar 2>/dev/null | grep -v 'original' | head -n 1)
+fi
+
+if [ -z "$JAR" ]; then
+    echo "❌ 未找到可执行jar，请检查构建输出"
+    exit 1
+fi
+
+PORT=${PORT:-8080}
+echo "🚀 启动Spring Boot应用: $JAR 于端口 $PORT"
+exec env PORT="$PORT" java -jar "$JAR"
