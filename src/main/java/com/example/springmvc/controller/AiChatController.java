@@ -6,6 +6,7 @@ import com.example.springmvc.dto.ChatResponse;
 import com.example.springmvc.service.AiChatService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * AI聊天控制器
@@ -42,6 +43,15 @@ public class AiChatController {
         String response = aiChatService.simpleChat(message);
         
         return ApiResponse.success(response);
+    }
+
+    /**
+     * 流式输出聊天接口（SSE）
+     */
+    @GetMapping(value = "/stream", produces = "text/event-stream")
+    public SseEmitter stream(@RequestParam String message) {
+        System.out.println("收到SSE流式聊天请求: " + message);
+        return aiChatService.streamChat(message);
     }
 
     /**

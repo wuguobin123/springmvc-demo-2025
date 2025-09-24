@@ -2,6 +2,7 @@ package com.example.springmvc.service;
 
 import com.example.springmvc.dto.ChatRequest;
 import com.example.springmvc.dto.ChatResponse;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * AI聊天服务接口
@@ -23,4 +24,12 @@ public interface AiChatService {
      * @return AI回复文本
      */
     String simpleChat(String message);
+
+    /**
+     * 流式输出聊天，使用SSE返回token流
+     *
+     * @param message 用户消息
+     * @return SseEmitter 用于服务端推送
+     */
+    SseEmitter streamChat(String message);
 }
