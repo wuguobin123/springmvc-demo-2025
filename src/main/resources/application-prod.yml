@@ -63,6 +63,25 @@ spring:
         options:
           model: ${AI_MODEL:Qwen/QwQ-32B}
           temperature: ${AI_TEMPERATURE:0.7}
+    
+  # MCP Server配置（生产环境）
+  mcp:
+    server:
+      enabled: true
+      name: springmvc-demo-mcp-server
+      version: 1.0.0
+      type: SYNC
+      # 注意：在生产环境中，确保端点路径与context-path一致
+      sse-endpoint: /api/mcp/sse
+      sse-message-endpoint: /api/mcp/message
+      capabilities:
+        tool: true
+        resource: true
+        prompt: true
+        completion: true
+      tool-change-notification: true
+      resource-change-notification: true
+      prompt-change-notification: true
           
 # 生产环境日志配置
 logging:
