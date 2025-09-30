@@ -129,10 +129,107 @@ docker exec mysql-db mysqldump -u root -p springmvc_demo > backup_$(date +%Y%m%d
 如果使用阿里云安全组，请确保开放以下端口：
 
 - 80/tcp (HTTP)
+- 443/tcp (HTTPS，如果配置SSL)
 - 8080/tcp (应用端口)
 - 3306/tcp (MySQL，可选，仅在需要外部连接时)
 - 6379/tcp (Redis，可选，仅在需要外部连接时)
 - 15672/tcp (RabbitMQ管理界面)
+
+## SSE服务配置
+
+为了确保SSE（Server-Sent Events）服务正常工作，需要进行以下配置：
+
+### 1. Nginx配置
+
+在Nginx配置文件中，需要为SSE端点添加特殊配置：
+
+```nginx
+# SSE流式输出配置
+location /api/ai/stream {
+    proxy_pass http://springmvc_backend;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Accept text/event-stream;
+    proxy_set_header X-Accel-Buffering no;
+    
+    # SSE特定配置
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+    
+    # 关闭缓冲以支持流式传输
+    proxy_buffering off;
+    
+    # 设置超时时间以维持长连接
+    proxy_connect_timeout 1s;
+    proxy_send_timeout 10s;
+    proxy_read_timeout 3600s;
+}
+```
+
+### 2. MCP SSE服务配置
+
+项目还包含MCP SSE服务，需要为以下端点配置特殊处理：
+
+```nginx
+# MCP SSE端点配置
+location /api/mcp/sse {
+    proxy_pass http://springmvc_backend;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Accept text/event-stream;
+    proxy_set_header X-Accel-Buffering no;
+    
+    # SSE特定配置
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+    
+    # 关闭缓冲以支持流式传输
+    proxy_buffering off;
+    
+    # 设置超时时间以维持长连接
+    proxy_connect_timeout 1s;
+    proxy_send_timeout 10s;
+    proxy_read_timeout 86400s;
+
+# MCP消息端点配置
+location /api/mcp/message {
+    proxy_pass http://springmvc_backend;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Accept text/event-stream;
+    proxy_set_header X-Accel-Buffering no;
+    
+    # SSE特定配置
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+    
+    # 关闭缓冲以支持流式传输
+    proxy_buffering off;
+    
+    # 设置超时时间以维持长连接
+    proxy_connect_timeout 1s;
+    proxy_send_timeout 10s;
+    proxy_read_timeout 86400s;
+}
+```
+
+关键配置说明：
+- `proxy_buffering off` - 关闭代理缓冲，确保数据实时传输
+- `proxy_http_version 1.1` - 使用HTTP/1.1以支持长连接
+- `proxy_set_header Connection ''` - 清除连接头以保持长连接
+- `proxy_read_timeout 86400s` - 设置长超时时间以维持长连接（24小时）
+
+### 3. 阿里云安全组配置
+
+确保阿里云安全组规则允许以下端口的访问：
+- 入方向：80端口（HTTP）
+- 入方向：443端口（如果启用HTTPS）
 
 ## 故障排除
 
