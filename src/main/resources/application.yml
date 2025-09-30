@@ -25,6 +25,23 @@ spring:
         options:
           model: Qwen/QwQ-32B
           temperature: 0.7
+    # MCP Server配置
+    mcp:
+      server:
+        enabled: true
+        name: springmvc-demo-mcp-server
+        version: 1.0.0
+        type: SYNC
+        sse-endpoint: /mcp/sse
+        sse-message-endpoint: /mcp/message
+        capabilities:
+          tool: true
+          resource: true
+          prompt: true
+          completion: true
+        tool-change-notification: true
+        resource-change-notification: true
+        prompt-change-notification: true
     
   # 数据源配置（开发环境将使用H2内存数据库）
   datasource:
