@@ -16,8 +16,9 @@ spring:
   application:
     name: springmvc-demo
   
-  # Spring AI配置
+  # Spring AI 配置
   ai:
+    # OpenAI 兼容接口配置（这里使用 SiliconFlow）
     openai:
       api-key: 1234567890
       base-url: https://api.siliconflow.cn/v1
@@ -25,24 +26,38 @@ spring:
         options:
           model: Qwen/QwQ-32B
           temperature: 0.7
-    # MCP Server配置
+          max-tokens: 2000
+    
+    # MCP Server 配置
+    # 参考: https://docs.spring.io/spring-ai/reference/api/mcp-server.html
     mcp:
       server:
+        # 是否启用 MCP Server
         enabled: true
+        
+        # 服务器名称（客户端会看到这个名称）
         name: springmvc-demo-mcp-server
+        
+        # 服务器版本
         version: 1.0.0
-        type: SYNC
-        # 注意：确保端点路径与context-path一致
-        sse-endpoint: /api/mcp/sse
-        sse-message-endpoint: /api/mcp/message
-        capabilities:
-          tool: true
-          resource: true
-          prompt: true
-          completion: true
-        tool-change-notification: true
-        resource-change-notification: true
-        prompt-change-notification: true
+        
+        # SSE (Server-Sent Events) 端点
+        # 客户端通过这个端点建立长连接，接收服务器推送的消息
+        # 完整 URL: http://host:port/api/mcp/sse
+        sse-endpoint: /mcp/sse
+        
+        # 消息端点
+        # 客户端通过这个端点发送 JSON-RPC 请求
+        # 完整 URL: http://host:port/api/mcp/message
+        message-endpoint: /mcp/message
+        
+        # 工具配置（通过 @Bean 方式注册，见 McpConfiguration.java）
+        # 支持的能力：
+        # - tools: 工具调用
+        # - resources: 资源管理
+        # - prompts: 提示词模板
+        # - completions: 自动补全
+        # - logging: 日志记录
     
   # 数据源配置（开发环境将使用H2内存数据库）
   datasource:
@@ -128,6 +143,8 @@ logging:
   level:
     com.example.springmvc: debug
     org.springframework.web: debug
+    org.springframework.ai: debug
+    io.modelcontextprotocol: debug
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
